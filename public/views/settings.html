@@ -645,7 +645,7 @@
                 </dialog>
 
                 <!-- Save Preset Modal -->
-                <dialog id="save_preset_modal" class="modal" x-data="{ presetName: '' }">
+                <dialog id="save_preset_modal" class="modal">
                     <div class="modal-box bg-space-900 border-2 border-neon-cyan/50">
                         <h3 class="font-bold text-lg text-neon-cyan flex items-center gap-2">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -660,26 +660,26 @@
                             <label class="label">
                                 <span class="label-text text-gray-300" x-text="$store.global.t('presetName') || 'Preset Name'">Preset Name</span>
                             </label>
-                            <input type="text" x-model="presetName"
+                            <input type="text" x-model="newPresetName"
                                 class="input input-sm input-bordered bg-space-800 border-space-border text-white w-full"
                                 :placeholder="$store.global.t('presetNamePlaceholder') || 'e.g., My Work Setup'"
-                                @keydown.enter="$root.executeSavePreset(presetName); presetName = ''"
-                                x-init="$watch('$el.closest(\'dialog\').open', open => { if (open) { presetName = ''; $nextTick(() => $el.focus()) } })"
+                                @keydown.enter="executeSavePreset(newPresetName)"
+                                x-init="$watch('$el.closest(\'dialog\').open', open => { if (open) { $nextTick(() => $el.focus()) } })"
                                 aria-label="Preset name">
                         </div>
                         <div class="modal-action">
-                            <button class="btn btn-ghost text-gray-400" @click="presetName = ''; document.getElementById('save_preset_modal').close()"
+                            <button class="btn btn-ghost text-gray-400" @click="newPresetName = ''; document.getElementById('save_preset_modal').close()"
                                 x-text="$store.global.t('cancel')">Cancel</button>
                             <button class="btn bg-neon-cyan hover:bg-cyan-600 border-none text-black"
-                                @click="$root.executeSavePreset(presetName); presetName = ''"
-                                :disabled="!presetName.trim() || $root.savingPreset"
-                                :class="{ 'loading': $root.savingPreset }">
-                                <span x-show="!$root.savingPreset" x-text="$store.global.t('savePreset') || 'Save Preset'">Save Preset</span>
+                                @click="executeSavePreset(newPresetName)"
+                                :disabled="!newPresetName.trim() || savingPreset"
+                                :class="{ 'loading': savingPreset }">
+                                <span x-show="!savingPreset" x-text="$store.global.t('savePreset') || 'Save Preset'">Save Preset</span>
                             </button>
                         </div>
                     </div>
                     <form method="dialog" class="modal-backdrop">
-                        <button @click="presetName = ''">close</button>
+                        <button @click="newPresetName = ''">close</button>
                     </form>
                 </dialog>
             </div>

@@ -18,6 +18,7 @@ window.Components.claudeConfig = () => ({
     savingPreset: false,
     deletingPreset: false,
     pendingPresetName: '', // For unsaved changes confirmation
+    newPresetName: '', // For save preset modal input
 
     // Model fields that may contain Gemini model names
     geminiModelFields: [
@@ -307,7 +308,8 @@ window.Components.claudeConfig = () => ({
      * Save the current config as a new preset
      */
     async saveCurrentAsPreset() {
-        // Show the save preset modal
+        // Clear the input and show the save preset modal
+        this.newPresetName = '';
         document.getElementById('save_preset_modal').showModal();
     },
 
@@ -354,6 +356,7 @@ window.Components.claudeConfig = () => ({
             if (data.status === 'ok') {
                 this.presets = data.presets || [];
                 this.selectedPresetName = name.trim();
+                this.newPresetName = ''; // Clear the input
                 Alpine.store('global').showToast(
                     Alpine.store('global').t('presetSaved') || `Preset "${name}" saved`,
                     'success'
