@@ -5,7 +5,7 @@
  */
 
 import { ACCOUNT_CONFIG_PATH } from '../constants.js';
-import { loadAccounts, loadDefaultAccount, saveAccounts } from './storage.js';
+import { loadAccounts, loadDefaultAccount, loadAccountsFromEnv, saveAccounts } from './storage.js';
 import {
     isAllRateLimited as checkAllRateLimited,
     getAvailableAccounts as getAvailable,
@@ -68,6 +68,29 @@ export class AccountManager {
         this.#accounts = accounts;
         this.#settings = settings;
         this.#currentIndex = activeIndex;
+
+        // Merge accounts from environment variable (PROXY_ACCOUNTS)
+        const envAccounts = loadAccountsFromEnv();
+        if (envAccounts.length > 0) {
+            const existingEmails = new Set(this.#accounts.map(a => a.email));
+            for (const envAcc of envAccounts) {
+                if (existingEmails.has(envAcc.email)) {
+                    // Update existing account with env data
+                    const existing = this.#accounts.find(a => a.email === envAcc.email);
+                    Object.assign(existing, {
+                        refreshToken: envAcc.refreshToken || existing.refreshToken,
+                        apiKey: envAcc.apiKey || existing.apiKey,
+                        source: envAcc.apiKey ? 'manual' : 'oauth',
+                        isInvalid: false,  // Reset invalid state
+                        invalidReason: null,
+                        fromEnv: true
+                    });
+                    logger.info(`[AccountManager] Updated account ${envAcc.email} from env`);
+                } else {
+                    this.#accounts.push(envAcc);
+                }
+            }
+        }
 
         // If config exists but has no accounts, fall back to Antigravity database
         if (this.#accounts.length === 0) {

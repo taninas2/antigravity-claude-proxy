@@ -94,6 +94,68 @@ export function loadDefaultAccount(dbPath) {
 }
 
 /**
+ * Load accounts from PROXY_ACCOUNTS environment variable
+ * Format: JSON array with objects containing email and refresh_token or api_key
+ * Example: [{"email":"test@example.com","refresh_token":"xxx"},{"email":"user@gmail.com","api_key":"sk-xxx"}]
+ *
+ * @returns {Array} accounts - Array of account objects loaded from env
+ */
+export function loadAccountsFromEnv() {
+    const envAccounts = process.env.PROXY_ACCOUNTS;
+    if (!envAccounts) {
+        return [];
+    }
+
+    try {
+        const parsed = JSON.parse(envAccounts);
+        if (!Array.isArray(parsed)) {
+            logger.warn('[AccountManager] PROXY_ACCOUNTS env var must be a JSON array');
+            return [];
+        }
+
+        const accounts = [];
+        for (const acc of parsed) {
+            if (!acc.email) {
+                logger.warn('[AccountManager] Skipping env account without email');
+                continue;
+            }
+
+            // Support both snake_case and camelCase
+            const refreshToken = acc.refresh_token || acc.refreshToken;
+            const apiKey = acc.api_key || acc.apiKey;
+
+            if (!refreshToken && !apiKey) {
+                logger.warn(`[AccountManager] Skipping env account ${acc.email}: missing refresh_token or api_key`);
+                continue;
+            }
+
+            accounts.push({
+                email: acc.email,
+                source: apiKey ? 'manual' : 'oauth',
+                refreshToken: refreshToken,
+                apiKey: apiKey,
+                enabled: true,
+                isInvalid: false,
+                invalidReason: null,
+                modelRateLimits: {},
+                lastUsed: null,
+                addedAt: new Date().toISOString(),
+                fromEnv: true  // Mark as loaded from env
+            });
+        }
+
+        if (accounts.length > 0) {
+            logger.info(`[AccountManager] Loaded ${accounts.length} account(s) from PROXY_ACCOUNTS env var`);
+        }
+
+        return accounts;
+    } catch (error) {
+        logger.error('[AccountManager] Failed to parse PROXY_ACCOUNTS env var:', error.message);
+        return [];
+    }
+}
+
+/**
  * Save account configuration to disk
  *
  * @param {string} configPath - Path to the config file
