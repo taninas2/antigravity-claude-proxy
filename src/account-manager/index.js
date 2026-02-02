@@ -5,6 +5,7 @@
  */
 
 import { ACCOUNT_CONFIG_PATH } from '../constants.js';
+import { config } from '../config.js';
 import { loadAccounts, loadDefaultAccount, loadAccountsFromEnv, saveAccounts } from './storage.js';
 import {
     isAllRateLimited as checkAllRateLimited,
@@ -441,7 +442,10 @@ export class AccountManager {
                 modelRateLimits: a.modelRateLimits || {},
                 isInvalid: a.isInvalid || false,
                 invalidReason: a.invalidReason || null,
-                lastUsed: a.lastUsed
+                lastUsed: a.lastUsed,
+                // Include quota threshold settings
+                quotaThreshold: a.quotaThreshold,
+                modelQuotaThresholds: a.modelQuotaThresholds || {}
             }))
         };
     }

@@ -33,7 +33,7 @@ function getAntigravityDbPath() {
 function getPlatformUserAgent() {
     const os = platform();
     const architecture = arch();
-    return `antigravity/1.11.5 ${os}/${architecture}`;
+    return `antigravity/1.15.8 ${os}/${architecture}`;
 }
 
 // Cloud Code API endpoints (in fallback order)
@@ -155,6 +155,9 @@ export const GEMINI_SKIP_SIGNATURE = 'skip_thought_signature_validator';
 
 // Cache TTL for Gemini thoughtSignatures (2 hours)
 export const GEMINI_SIGNATURE_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+
+// Cache TTL for model validation (5 minutes)
+export const MODEL_VALIDATION_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Get the model family from model name (dynamic detection, no hardcoded list).
@@ -295,6 +298,7 @@ export default {
     GEMINI_MAX_OUTPUT_TOKENS,
     GEMINI_SKIP_SIGNATURE,
     GEMINI_SIGNATURE_CACHE_TTL_MS,
+    MODEL_VALIDATION_CACHE_TTL_MS,
     getModelFamily,
     isThinkingModel,
     OAUTH_CONFIG,
