@@ -34,7 +34,6 @@ import {
 } from './credentials.js';
 import { createStrategy, getStrategyLabel, DEFAULT_STRATEGY } from './strategies/index.js';
 import { logger } from '../utils/logger.js';
-import { config } from '../config.js';
 
 export class AccountManager {
     #accounts = [];
