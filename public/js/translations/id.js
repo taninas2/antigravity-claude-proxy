@@ -136,6 +136,19 @@ window.translations.id = {
     presetName: "Nama Preset",
     presetNamePlaceholder: "contoh: Setup Kantor",
     savePreset: "Simpan Preset",
+    // Server Presets
+    serverPresets: "Preset Server",
+    serverPresetsHint: "Pilih preset dan klik ikon unduh untuk menerapkan. Preset bawaan (\uD83D\uDD12) tidak bisa dihapus.",
+    loadServerPreset: "Muat preset server",
+    saveServerPreset: "Simpan Preset Server",
+    saveServerPresetDesc: "Simpan konfigurasi server saat ini sebagai preset.",
+    serverPresetLoaded: "Preset \"{name}\" diterapkan",
+    serverPresetSaved: "Preset server tersimpan",
+    serverPresetDeleted: "Preset server terhapus",
+    cannotDeleteBuiltIn: "Tidak bisa menghapus preset bawaan",
+    failedToLoadServerPreset: "Gagal menerapkan preset",
+    failedToSaveServerPreset: "Gagal menyimpan preset",
+    failedToDeleteServerPreset: "Gagal menghapus preset",
 
     // Settings - Server
     port: "Port",

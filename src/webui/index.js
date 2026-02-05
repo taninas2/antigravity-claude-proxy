@@ -15,8 +15,9 @@
 import path from 'path';
 import express from 'express';
 import { getPublicConfig, saveConfig, config } from '../config.js';
-import { DEFAULT_PORT, ACCOUNT_CONFIG_PATH, MAX_ACCOUNTS, DEFAULT_PRESETS } from '../constants.js';
+import { DEFAULT_PORT, ACCOUNT_CONFIG_PATH, MAX_ACCOUNTS, DEFAULT_PRESETS, DEFAULT_SERVER_PRESETS } from '../constants.js';
 import { readClaudeConfig, updateClaudeConfig, replaceClaudeConfig, getClaudeConfigPath, readPresets, savePreset, deletePreset } from '../utils/claude-config.js';
+import { readServerPresets, saveServerPreset, deleteServerPreset } from '../utils/server-presets.js';
 import { logger } from '../utils/logger.js';
 import { getAuthorizationUrl, completeOAuthFlow, startCallbackServer } from '../auth/oauth.js';
 import { loadAccounts, saveAccounts } from '../account-manager/storage.js';
@@ -510,14 +511,51 @@ export function mountWebUI(app, dirname, accountManager) {
             if (typeof maxCapacityRetries === 'number' && maxCapacityRetries >= 1 && maxCapacityRetries <= 10) {
                 updates.maxCapacityRetries = maxCapacityRetries;
             }
-            // Account selection strategy validation
+            // Account selection strategy and tuning validation
             if (accountSelection && typeof accountSelection === 'object') {
                 const validStrategies = ['sticky', 'round-robin', 'hybrid'];
+                const acctUpdate = {};
+
                 if (accountSelection.strategy && validStrategies.includes(accountSelection.strategy)) {
-                    updates.accountSelection = {
-                        ...(config.accountSelection || {}),
-                        strategy: accountSelection.strategy
-                    };
+                    acctUpdate.strategy = accountSelection.strategy;
+                }
+
+                // Health score tuning
+                if (accountSelection.healthScore && typeof accountSelection.healthScore === 'object') {
+                    const hs = accountSelection.healthScore;
+                    const hsUpdate = {};
+                    if (typeof hs.initial === 'number' && hs.initial >= 0 && hs.initial <= 100) hsUpdate.initial = hs.initial;
+                    if (typeof hs.successReward === 'number' && hs.successReward >= 0 && hs.successReward <= 20) hsUpdate.successReward = hs.successReward;
+                    if (typeof hs.rateLimitPenalty === 'number' && hs.rateLimitPenalty >= -50 && hs.rateLimitPenalty <= 0) hsUpdate.rateLimitPenalty = hs.rateLimitPenalty;
+                    if (typeof hs.failurePenalty === 'number' && hs.failurePenalty >= -50 && hs.failurePenalty <= 0) hsUpdate.failurePenalty = hs.failurePenalty;
+                    if (typeof hs.recoveryPerHour === 'number' && hs.recoveryPerHour >= 0 && hs.recoveryPerHour <= 20) hsUpdate.recoveryPerHour = hs.recoveryPerHour;
+                    if (typeof hs.minUsable === 'number' && hs.minUsable >= 0 && hs.minUsable <= 100) hsUpdate.minUsable = hs.minUsable;
+                    if (typeof hs.maxScore === 'number' && hs.maxScore >= 1 && hs.maxScore <= 200) hsUpdate.maxScore = hs.maxScore;
+                    if (Object.keys(hsUpdate).length > 0) acctUpdate.healthScore = hsUpdate;
+                }
+
+                // Token bucket tuning
+                if (accountSelection.tokenBucket && typeof accountSelection.tokenBucket === 'object') {
+                    const tb = accountSelection.tokenBucket;
+                    const tbUpdate = {};
+                    if (typeof tb.maxTokens === 'number' && tb.maxTokens >= 5 && tb.maxTokens <= 200) tbUpdate.maxTokens = tb.maxTokens;
+                    if (typeof tb.tokensPerMinute === 'number' && tb.tokensPerMinute >= 1 && tb.tokensPerMinute <= 60) tbUpdate.tokensPerMinute = tb.tokensPerMinute;
+                    if (typeof tb.initialTokens === 'number' && tb.initialTokens >= 1 && tb.initialTokens <= 200) tbUpdate.initialTokens = tb.initialTokens;
+                    if (Object.keys(tbUpdate).length > 0) acctUpdate.tokenBucket = tbUpdate;
+                }
+
+                // Quota tuning
+                if (accountSelection.quota && typeof accountSelection.quota === 'object') {
+                    const q = accountSelection.quota;
+                    const qUpdate = {};
+                    if (typeof q.lowThreshold === 'number' && q.lowThreshold >= 0 && q.lowThreshold < 1) qUpdate.lowThreshold = q.lowThreshold;
+                    if (typeof q.criticalThreshold === 'number' && q.criticalThreshold >= 0 && q.criticalThreshold < 1) qUpdate.criticalThreshold = q.criticalThreshold;
+                    if (typeof q.staleMs === 'number' && q.staleMs >= 30000 && q.staleMs <= 3600000) qUpdate.staleMs = q.staleMs;
+                    if (Object.keys(qUpdate).length > 0) acctUpdate.quota = qUpdate;
+                }
+
+                if (Object.keys(acctUpdate).length > 0) {
+                    updates.accountSelection = acctUpdate;
                 }
             }
 
@@ -826,6 +864,62 @@ export function mountWebUI(app, dirname, accountManager) {
             res.json({ status: 'ok', presets, message: `Preset "${name}" deleted` });
         } catch (error) {
             res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    // ==========================================
+    // Server Configuration Presets API
+    // ==========================================
+
+    /**
+     * GET /api/server/presets - List all server config presets
+     */
+    app.get('/api/server/presets', async (req, res) => {
+        try {
+            const presets = await readServerPresets();
+            res.json({ status: 'ok', presets });
+        } catch (error) {
+            logger.error('[WebUI] Error reading server presets:', error);
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    /**
+     * POST /api/server/presets - Save a custom server config preset
+     */
+    app.post('/api/server/presets', async (req, res) => {
+        try {
+            const { name, config: presetConfig } = req.body;
+            if (!name || typeof name !== 'string' || !name.trim()) {
+                return res.status(400).json({ status: 'error', error: 'Preset name is required' });
+            }
+            if (!presetConfig || typeof presetConfig !== 'object') {
+                return res.status(400).json({ status: 'error', error: 'Config object is required' });
+            }
+
+            const presets = await saveServerPreset(name.trim(), presetConfig);
+            res.json({ status: 'ok', presets, message: `Server preset "${name}" saved` });
+        } catch (error) {
+            const status = error.message.includes('built-in') ? 400 : 500;
+            res.status(status).json({ status: 'error', error: error.message });
+        }
+    });
+
+    /**
+     * DELETE /api/server/presets/:name - Delete a custom server config preset
+     */
+    app.delete('/api/server/presets/:name', async (req, res) => {
+        try {
+            const { name } = req.params;
+            if (!name) {
+                return res.status(400).json({ status: 'error', error: 'Preset name is required' });
+            }
+
+            const presets = await deleteServerPreset(name);
+            res.json({ status: 'ok', presets, message: `Server preset "${name}" deleted` });
+        } catch (error) {
+            const status = error.message.includes('built-in') ? 400 : 500;
+            res.status(status).json({ status: 'error', error: error.message });
         }
     });
 

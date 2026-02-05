@@ -10,16 +10,26 @@ window.Components.serverConfig = () => ({
     advancedExpanded: false,
     debounceTimers: {}, // Store debounce timers for each config field
 
+    // Server presets state
+    serverPresets: [],
+    selectedServerPreset: '',
+    loadingPreset: false,
+    savingServerPreset: false,
+    deletingServerPreset: false,
+    newServerPresetName: '',
+
     init() {
         // Initial fetch if this is the active sub-tab
         if (this.activeTab === 'server') {
             this.fetchServerConfig();
+            this.fetchServerPresets();
         }
 
         // Watch local activeTab (from parent settings scope, skip initial trigger)
         this.$watch('activeTab', (tab, oldTab) => {
             if (tab === 'server' && oldTab !== undefined) {
                 this.fetchServerConfig();
+                this.fetchServerPresets();
             }
         });
     },
@@ -390,5 +400,170 @@ window.Components.serverConfig = () => ({
             'hybrid': store.t('strategyHybridDesc')
         };
         return descriptions[strategy] || '';
+    },
+
+    // ==========================================
+    // Server Configuration Presets
+    // ==========================================
+
+    async fetchServerPresets() {
+        const password = Alpine.store('global').webuiPassword;
+        try {
+            const { response, newPassword } = await window.utils.request('/api/server/presets', {}, password);
+            if (newPassword) Alpine.store('global').webuiPassword = newPassword;
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            if (data.status === 'ok') {
+                this.serverPresets = data.presets || [];
+                if (this.serverPresets.length > 0 && !this.selectedServerPreset) {
+                    this.selectedServerPreset = this.serverPresets[0].name;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to fetch server presets:', e);
+        }
+    },
+
+    /**
+     * Load a server preset — applies all config values via POST /api/config
+     */
+    async loadServerPreset(name) {
+        const preset = this.serverPresets.find(p => p.name === name);
+        if (!preset) return;
+
+        this.loadingPreset = true;
+        const store = Alpine.store('global');
+
+        try {
+            const { response, newPassword } = await window.utils.request('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(preset.config)
+            }, store.webuiPassword);
+
+            if (newPassword) store.webuiPassword = newPassword;
+
+            const data = await response.json();
+            if (data.status === 'ok') {
+                store.showToast(store.t('serverPresetLoaded', { name }) || `Preset "${name}" applied`, 'success');
+                await this.fetchServerConfig();
+            } else {
+                throw new Error(data.error || 'Failed to apply preset');
+            }
+        } catch (e) {
+            store.showToast((store.t('failedToLoadServerPreset') || 'Failed to apply preset') + ': ' + e.message, 'error');
+        } finally {
+            this.loadingPreset = false;
+        }
+    },
+
+    /**
+     * Save current server config as a new custom preset
+     */
+    async saveCurrentAsServerPreset() {
+        this.newServerPresetName = '';
+        document.getElementById('save_server_preset_modal').showModal();
+    },
+
+    async executeSaveServerPreset(name) {
+        if (!name || !name.trim()) {
+            Alpine.store('global').showToast(Alpine.store('global').t('presetNameRequired') || 'Preset name is required', 'error');
+            return;
+        }
+
+        this.savingServerPreset = true;
+        const store = Alpine.store('global');
+        const password = store.webuiPassword;
+
+        try {
+            // Extract relevant config fields (exclude sensitive/non-tunable)
+            const relevantKeys = [
+                'maxRetries', 'retryBaseMs', 'retryMaxMs', 'defaultCooldownMs',
+                'maxWaitBeforeErrorMs', 'maxAccounts', 'globalQuotaThreshold',
+                'rateLimitDedupWindowMs', 'maxConsecutiveFailures', 'extendedCooldownMs',
+                'maxCapacityRetries', 'accountSelection'
+            ];
+            const presetConfig = {};
+            relevantKeys.forEach(k => {
+                if (this.serverConfig[k] !== undefined) {
+                    presetConfig[k] = JSON.parse(JSON.stringify(this.serverConfig[k]));
+                }
+            });
+
+            const { response, newPassword } = await window.utils.request('/api/server/presets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim(), config: presetConfig })
+            }, password);
+            if (newPassword) store.webuiPassword = newPassword;
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || `HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            if (data.status === 'ok') {
+                this.serverPresets = data.presets || [];
+                this.selectedServerPreset = name.trim();
+                this.newServerPresetName = '';
+                store.showToast(store.t('serverPresetSaved') || `Preset "${name}" saved`, 'success');
+                document.getElementById('save_server_preset_modal').close();
+            } else {
+                throw new Error(data.error || 'Failed to save preset');
+            }
+        } catch (e) {
+            store.showToast((store.t('failedToSaveServerPreset') || 'Failed to save preset') + ': ' + e.message, 'error');
+        } finally {
+            this.savingServerPreset = false;
+        }
+    },
+
+    async deleteSelectedServerPreset() {
+        if (!this.selectedServerPreset) return;
+
+        // Check if built-in
+        const preset = this.serverPresets.find(p => p.name === this.selectedServerPreset);
+        if (preset?.builtIn) {
+            Alpine.store('global').showToast(Alpine.store('global').t('cannotDeleteBuiltIn') || 'Cannot delete built-in presets', 'warning');
+            return;
+        }
+
+        const store = Alpine.store('global');
+        const confirmMsg = store.t('deletePresetConfirm', { name: this.selectedServerPreset });
+        if (!confirm(confirmMsg)) return;
+
+        this.deletingServerPreset = true;
+
+        try {
+            const { response, newPassword } = await window.utils.request(
+                `/api/server/presets/${encodeURIComponent(this.selectedServerPreset)}`,
+                { method: 'DELETE' },
+                store.webuiPassword
+            );
+            if (newPassword) store.webuiPassword = newPassword;
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || `HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            if (data.status === 'ok') {
+                this.serverPresets = data.presets || [];
+                this.selectedServerPreset = this.serverPresets.length > 0 ? this.serverPresets[0].name : '';
+                store.showToast(store.t('serverPresetDeleted') || 'Preset deleted', 'success');
+            } else {
+                throw new Error(data.error || 'Failed to delete preset');
+            }
+        } catch (e) {
+            store.showToast((store.t('failedToDeleteServerPreset') || 'Failed to delete preset') + ': ' + e.message, 'error');
+        } finally {
+            this.deletingServerPreset = false;
+        }
+    },
+
+    isSelectedPresetBuiltIn() {
+        const preset = this.serverPresets.find(p => p.name === this.selectedServerPreset);
+        return preset?.builtIn === true;
     }
 });

@@ -3,6 +3,28 @@ import path from 'path';
 import os from 'os';
 import { logger } from './utils/logger.js';
 
+function isObject(item) {
+    return (item && typeof item === 'object' && !Array.isArray(item));
+}
+
+function deepMerge(target, source) {
+    const output = { ...target };
+    if (isObject(target) && isObject(source)) {
+        Object.keys(source).forEach(key => {
+            if (isObject(source[key])) {
+                if (!(key in target)) {
+                    Object.assign(output, { [key]: source[key] });
+                } else {
+                    output[key] = deepMerge(target[key], source[key]);
+                }
+            } else {
+                Object.assign(output, { [key]: source[key] });
+            }
+        });
+    }
+    return output;
+}
+
 // Default config
 const DEFAULT_CONFIG = {
     apiKey: '',
@@ -75,14 +97,14 @@ function loadConfig() {
         if (fs.existsSync(CONFIG_FILE)) {
             const fileContent = fs.readFileSync(CONFIG_FILE, 'utf8');
             const userConfig = JSON.parse(fileContent);
-            config = { ...DEFAULT_CONFIG, ...userConfig };
+            config = deepMerge(DEFAULT_CONFIG, userConfig);
         } else {
              // Try looking in current dir for config.json as fallback
              const localConfigPath = path.resolve('config.json');
              if (fs.existsSync(localConfigPath)) {
                  const fileContent = fs.readFileSync(localConfigPath, 'utf8');
                  const userConfig = JSON.parse(fileContent);
-                 config = { ...DEFAULT_CONFIG, ...userConfig };
+                 config = deepMerge(DEFAULT_CONFIG, userConfig);
              }
         }
 
@@ -116,8 +138,8 @@ export function getPublicConfig() {
 
 export function saveConfig(updates) {
     try {
-        // Apply updates
-        config = { ...config, ...updates };
+        // Apply updates (deep merge to preserve nested configs)
+        config = deepMerge(config, updates);
 
         // Save to disk
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
