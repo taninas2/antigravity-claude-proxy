@@ -9,6 +9,8 @@
  * @param {string} field - config.env key (e.g. 'ANTHROPIC_MODEL')
  * @param {string} labelKey - i18n key for the label
  * @param {string} accentColor - 'cyan' or 'purple' (maps to Tailwind border classes)
+ *
+ * Requires parent scope to provide: config, selectModel(), gemini1mSuffix
  */
 window.Components = window.Components || {};
 
@@ -20,6 +22,12 @@ window.Components.modelDropdown = (field, labelKey, accentColor) => ({
     open: false,
     searchTerm: '',
     highlightIndex: -1,
+
+    init() {
+        if (typeof this.selectModel !== 'function' || !this.config) {
+            console.error(`modelDropdown(${field}): must be nested inside a parent scope that provides config and selectModel()`);
+        }
+    },
 
     get currentValue() {
         return this.config?.env?.[this.field] || '';
@@ -84,7 +92,7 @@ window.Components.modelDropdown = (field, labelKey, accentColor) => ({
 
     clearField() {
         if (this.config?.env) {
-            this.config.env[this.field] = '';
+            delete this.config.env[this.field];
         }
         this.closeDropdown();
     },
